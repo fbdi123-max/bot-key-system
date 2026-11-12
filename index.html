@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>Bot License Management System</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; margin-top: 30px; background: #f4f4f9; }
+        .box { background: white; padding: 30px; display: inline-block; border-radius: 8px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1); width: 400px; }
+        h2 { color: #333; }
+        #result { font-size: 20px; font-weight: bold; margin-top: 15px; }
+        .valid { color: green; }
+        .invalid { color: red; }
+        .admin-panel { margin-top: 30px; border-top: 2px dashed #ddd; padding-top: 20px; text-align: left; }
+        input, button { width: 100%; padding: 10px; margin-top: 8px; box-sizing: border-box; border-radius: 5px; border: 1px solid #ccc; }
+        button { background: #28a745; color: white; border: none; font-weight: bold; cursor: pointer; }
+        button:hover { background: #218838; }
+        .key-output { background: #e9ecef; padding: 10px; margin-top: 10px; word-break: break-all; font-family: monospace; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <h2>ระบบตรวจสอบ & เจนคีย์บอท</h2>
+    
+    <div id="result">กำลังตรวจสอบ...</div>
+
+    <div class="admin-panel">
+        <h3>🛠️ สร้างคีย์ใหม่ (Admin)</h3>
+        <label>รหัสผ่านแอดมิน:</label>
+        <input type="password" id="adminPass" placeholder="ใส่รหัสผ่านแอดมิน">
+        
+        <label>จำนวนวันใช้งาน:</label>
+        <input type="number" id="keyDays" value="30" placeholder="เช่น 30 วัน">
+        
+        <button onclick="generateKey()">สร้างคีย์ใหม่</button>
+        
+        <div id="newKeyResult" class="key-output" style="display:none;"></div>
+    </div>
+</div>
+
+<script>
+    // เชื่อมต่อกับ Supabase ของคุณ
+    const SUPABASE_URL = 'https://gnwtjgpbnjofbxptszxn.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_rqJQM8XFQpown-v9GJKMPw_07Lk84eW';
+    
+    const ADMIN_SECRET = '123456'; // รหัสผ่านสำหรับกดเจนคีย์บนหน้าเว็บ
+
+    const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    async function checkKey() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const key = urlParams.get('key');
+        const resultDiv = document.getElementById('result');
+
+        if (!key) {
+            resultDiv.innerHTML = "สถานะ: พร้อมใช้งาน (หน้าระบบหลัก)";
+            resultDiv.className = "";
+            return;
+        }
+
+        const { data, error } = await _supabase
+            .from('licenses')
+            .select('*')
+            .eq('license_key', key)
+            .eq('status', 'active')
+            .gte('expires_at', new Date().toISOString());
+
+        if (error || !data || data.length === 0) {
+            resultDiv.innerHTML = "INVALID";
+            resultDiv.className = "invalid";
+        } else {
+            resultDiv.innerHTML = "VALID";
+            resultDiv.className = "valid";
+        }
+    }
+
+    function makeKey(length = 16) {
+        let result = '';
+        const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        for (let i = 0; i < length; i++) {
+            result += characters.charAt(Math.floor(Math.random() * characters.length));
+        }
+        return result.match(/.{1,4}/g).join('-');
+    }
+
+    async function generateKey() {
+        const pass = document.getElementById('adminPass').value;
+        const days = parseInt(document.getElementById('keyDays').value) || 30;
+        const outputDiv = document.getElementById('newKeyResult');
+
+        if (pass !== ADMIN_SECRET) {
+            alert('รหัสผ่านแอดมินไม่ถูกต้อง!');
+            return;
+        }
+
+        const newKey = makeKey(16);
+        const expireDate = new Date();
+        expireDate.setDate(expireDate.getDate() + days);
+
+        const { error } = await _supabase
+            .from('licenses')
+            .insert([{ 
+                license_key: newKey, 
+                status: 'active', 
+                expires_at: expireDate.toISOString() 
+            }]);
+
+        if (error) {
+            alert('เกิดข้อผิดพลาดในการบันทึก: ' + error.message);
+        } else {
+            outputDiv.style.display = 'block';
+            outputDiv.innerHTML = `คีย์ใหม่ของคุณ:<br><b>${newKey}</b><br>(หมดอายุในอีก ${days} วัน)`;
+        }
+    }
+
+    checkKey();
+</script>
+
+</body>
+</html>
